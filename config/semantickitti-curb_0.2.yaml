@@ -41,20 +41,20 @@ dataset_params:
 ###################
 ## Data_loader options
 train_data_loader:
-  data_path: "/home/gyzhao/python-zgy/111/seq_0.2_sample"
+  data_path: "/app/files/CurbNet-main/data/3D-Curb-Dataset-all"
   imageset: "train"
   return_ref: True
   batch_size: 6  #原有2   4  12 8   一般8
   shuffle: True
-  num_workers: 8  #原有4
+  num_workers: 0 #8  #原有4
 
 val_data_loader:
-  data_path: "/home/gyzhao/python-zgy/111/seq_0.2_sample"
+  data_path: "/app/files/CurbNet-main/data/3D-Curb-Dataset-all"
   imageset: "val"
   return_ref: True
   batch_size: 6  #原有1 4 8     一般8
   shuffle: False
-  num_workers: 8  #原有4
+  num_workers: 0 #8  #原有4
 
 
 ###################

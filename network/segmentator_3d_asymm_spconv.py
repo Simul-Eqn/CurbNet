@@ -1,46 +1,14 @@
-﻿# -*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 # author: CurbNet
 # @file: segmentator_3d_asymm_spconv.py
 
 import numpy as np
-import spconv
+import spconv.pytorch as spconv
 import torch
 from torch import nn
 
 
-def conv3x3(in_planes, out_planes, stride=1, indice_key=None):
-    return spconv.SubMConv3d(in_planes, out_planes, kernel_size=3, stride=stride,
-                             padding=1, bias=False, indice_key=indice_key)
-
-
-def conv1x3(in_planes, out_planes, stride=1, indice_key=None):
-    return spconv.SubMConv3d(in_planes, out_planes, kernel_size=(1, 3, 3), stride=stride,
-                             padding=(0, 1, 1), bias=False, indice_key=indice_key)
-
-
-def conv1x1x3(in_planes, out_planes, stride=1, indice_key=None):
-    return spconv.SubMConv3d(in_planes, out_planes, kernel_size=(1, 1, 3), stride=stride,
-                             padding=(0, 0, 1), bias=False, indice_key=indice_key)
-
-
-def conv1x3x1(in_planes, out_planes, stride=1, indice_key=None):
-    return spconv.SubMConv3d(in_planes, out_planes, kernel_size=(1, 3, 1), stride=stride,
-                             padding=(0, 1, 0), bias=False, indice_key=indice_key)
-
-
-def conv3x1x1(in_planes, out_planes, stride=1, indice_key=None):
-    return spconv.SubMConv3d(in_planes, out_planes, kernel_size=(3, 1, 1), stride=stride,
-                             padding=(1, 0, 0), bias=False, indice_key=indice_key)
-
-
-def conv3x1(in_planes, out_planes, stride=1, indice_key=None):
-    return spconv.SubMConv3d(in_planes, out_planes, kernel_size=(3, 1, 3), stride=stride,
-                             padding=(1, 0, 1), bias=False, indice_key=indice_key)
-
-
-def conv1x1(in_planes, out_planes, stride=1, indice_key=None):
-    return spconv.SubMConv3d(in_planes, out_planes, kernel_size=1, stride=stride,
-                             padding=1, bias=False, indice_key=indice_key)
+from network.spconv_utils import conv3x3, conv1x3, conv3x1, conv3x3x1, conv1x1x3, conv1x3x1, conv3x1x1, conv1x1
 
 ### A module
 class ResContextBlock(nn.Module):
@@ -72,21 +40,21 @@ class ResContextBlock(nn.Module):
 
     def forward(self, x):
         shortcut = self.conv1(x)
-        shortcut.features = self.act1(shortcut.features)
-        shortcut.features = self.bn0(shortcut.features)
+        shortcut = shortcut.replace_feature(self.act1(shortcut.features))
+        shortcut = shortcut.replace_feature(self.bn0(shortcut.features))
 
         shortcut = self.conv1_2(shortcut)
-        shortcut.features = self.act1_2(shortcut.features)
-        shortcut.features = self.bn0_2(shortcut.features)
+        shortcut = shortcut.replace_feature(self.act1_2(shortcut.features))
+        shortcut = shortcut.replace_feature(self.bn0_2(shortcut.features))
 
         resA = self.conv2(x)
-        resA.features = self.act2(resA.features)
-        resA.features = self.bn1(resA.features)
+        resA = resA.replace_feature(self.act2(resA.features))
+        resA = resA.replace_feature(self.bn1(resA.features))
 
         resA = self.conv3(resA)
-        resA.features = self.act3(resA.features)
-        resA.features = self.bn2(resA.features)
-        resA.features = resA.features + shortcut.features  # A
+        resA = resA.replace_feature(self.act3(resA.features))
+        resA = resA.replace_feature(self.bn2(resA.features))
+        resA = resA.replace_feature(resA.features + shortcut.features)  # A
 
         return resA
 
@@ -131,22 +99,22 @@ class ResBlock(nn.Module):
 
     def forward(self, x):
         shortcut = self.conv1(x)
-        shortcut.features = self.act1(shortcut.features)
-        shortcut.features = self.bn0(shortcut.features)
+        shortcut = shortcut.replace_feature(self.act1(shortcut.features))
+        shortcut = shortcut.replace_feature(self.bn0(shortcut.features))
 
         shortcut = self.conv1_2(shortcut)
-        shortcut.features = self.act1_2(shortcut.features)
-        shortcut.features = self.bn0_2(shortcut.features)
+        shortcut = shortcut.replace_feature(self.act1_2(shortcut.features))
+        shortcut = shortcut.replace_feature(self.bn0_2(shortcut.features))
 
         resA = self.conv2(x)
-        resA.features = self.act2(resA.features)
-        resA.features = self.bn1(resA.features)
+        resA = resA.replace_feature(self.act2(resA.features))
+        resA = resA.replace_feature(self.bn1(resA.features))
 
         resA = self.conv3(resA)
-        resA.features = self.act3(resA.features)
-        resA.features = self.bn2(resA.features)
+        resA = resA.replace_feature(self.act3(resA.features))
+        resA = resA.replace_feature(self.bn2(resA.features))
 
-        resA.features = resA.features + shortcut.features
+        resA = resA.replace_feature(resA.features + shortcut.features)
 
         if self.pooling:
             resB = self.pool(resA)
@@ -189,25 +157,25 @@ class UpBlock(nn.Module):
 
     def forward(self, x, skip):
         upA = self.trans_dilao(x)
-        upA.features = self.trans_act(upA.features)
-        upA.features = self.trans_bn(upA.features)
+        upA = upA.replace_feature(self.trans_act(upA.features))
+        upA = upA.replace_feature(self.trans_bn(upA.features))
 
         ## upsample
         upA = self.up_subm(upA)
 
-        upA.features = upA.features + skip.features
+        upA = upA.replace_feature(upA.features + skip.features)
 
         upE = self.conv1(upA)
-        upE.features = self.act1(upE.features)
-        upE.features = self.bn1(upE.features)
+        upE = upE.replace_feature(self.act1(upE.features))
+        upE = upE.replace_feature(self.bn1(upE.features))
 
         upE = self.conv2(upE)
-        upE.features = self.act2(upE.features)
-        upE.features = self.bn2(upE.features)
+        upE = upE.replace_feature(self.act2(upE.features))
+        upE = upE.replace_feature(self.bn2(upE.features))
 
         upE = self.conv3(upE)
-        upE.features = self.act3(upE.features)
-        upE.features = self.bn3(upE.features)
+        upE = upE.replace_feature(self.act3(upE.features))
+        upE = upE.replace_feature(self.bn3(upE.features))
 
         return upE
 
@@ -229,19 +197,19 @@ class ReconBlock(nn.Module):
 
     def forward(self, x):
         shortcut = self.conv1(x)
-        shortcut.features = self.bn0(shortcut.features)
-        shortcut.features = self.act1(shortcut.features)
+        shortcut = shortcut.replace_feature(self.bn0(shortcut.features))
+        shortcut = shortcut.replace_feature(self.act1(shortcut.features))
 
         shortcut2 = self.conv1_2(x)
-        shortcut2.features = self.bn0_2(shortcut2.features)
-        shortcut2.features = self.act1_2(shortcut2.features)
+        shortcut2 = shortcut2.replace_feature(self.bn0_2(shortcut2.features))
+        shortcut2 = shortcut2.replace_feature(self.act1_2(shortcut2.features))
 
         shortcut3 = self.conv1_3(x)
-        shortcut3.features = self.bn0_3(shortcut3.features)
-        shortcut3.features = self.act1_3(shortcut3.features)
-        shortcut.features = shortcut.features + shortcut2.features + shortcut3.features
+        shortcut3 = shortcut3.replace_feature(self.bn0_3(shortcut3.features))
+        shortcut3 = shortcut3.replace_feature(self.act1_3(shortcut3.features))
+        shortcut = shortcut.replace_feature(shortcut.features + shortcut2.features + shortcut3.features)
 
-        shortcut.features = shortcut.features * x.features
+        shortcut = shortcut.replace_feature(shortcut.features * x.features)
 
         return shortcut
 
@@ -313,7 +281,7 @@ class Asymm_3d_spconv(nn.Module):
 
         up0e = self.ReconNet(up1e)  # DDCM
 
-        up0e.features = torch.cat((up0e.features, up1e.features), 1)
+        up0e = up0e.replace_feature(torch.cat((up0e.features, up1e.features), 1))
 
         logits = self.logits(up0e)
         y = logits.dense()

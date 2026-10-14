@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CurbNet point-cloud inference</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 2rem auto; max-width: 1100px; padding: 0 1rem; color: #17212b; }
+    form { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    button { padding: .6rem 1rem; cursor: pointer; }
+    #status { margin: 1rem 0; white-space: pre-wrap; }
+    #plot { width: 100%; height: 70vh; min-height: 450px; }
+    .note { color: #44515c; }
+  </style>
+</head>
+<body>
+  <h1>CurbNet point-cloud inference</h1>
+  <p class="note">Upload one E57 or PLY cloud. RGB fields are ignored; XYZ and optional LiDAR intensity are used.
+    Curb predictions are model class 1 (raw dataset label 3).</p>
+  <form id="upload-form">
+    <input id="file" name="file" type="file" accept=".e57,.ply" required>
+    <button id="submit" type="submit">Upload and run inference</button>
+  </form>
+  <div id="status" role="status"></div>
+  <div id="plot"></div>
+  <script>
+    const form = document.getElementById("upload-form");
+    const status = document.getElementById("status");
+    const button = document.getElementById("submit");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const file = document.getElementById("file").files[0];
+      if (!file) return;
+      button.disabled = true;
+      status.textContent = `Uploading ${file.name} (${(file.size / 1024 ** 3).toFixed(2)} GiB) and running inference...`;
+      Plotly.purge("plot");
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        const response = await fetch("/api/predict", { method: "POST", body });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+
+        const xyz = result.visualization.xyz;
+        const labels = result.visualization.labels;
+        const curb = {x: [], y: [], z: []};
+        const other = {x: [], y: [], z: []};
+        for (let i = 0; i < labels.length; i++) {
+          const target = labels[i] === result.curb_model_class ? curb : other;
+          target.x.push(xyz[i][0]);
+          target.y.push(xyz[i][1]);
+          target.z.push(xyz[i][2]);
+        }
+        Plotly.newPlot("plot", [
+          { ...other, type: "scatter3d", mode: "markers", name: "Other points",
+            marker: {size: 2, color: "#aab4be", opacity: 0.45} },
+          { ...curb, type: "scatter3d", mode: "markers", name: "Curb (model class 1)",
+            marker: {size: 3, color: "#00d46a", opacity: 1} }
+        ], {
+          title: "CurbNet predictions (display sample)",
+          scene: {xaxis: {title: "X"}, yaxis: {title: "Y"}, zaxis: {title: "Z"}, aspectmode: "data"},
+          margin: {l: 0, r: 0, b: 0, t: 40}
+        }, {responsive: true});
+        status.textContent = `Processed ${result.point_count.toLocaleString()} points. ` +
+          `${result.curb_count.toLocaleString()} predicted curb points. ` +
+          `The interactive view shows a sample of at most 60,000 points. `;
+        const link = document.createElement("a");
+        link.href = result.labels_url;
+        link.textContent = "Download full per-point labels (.npy)";
+        status.appendChild(link);
+      } catch (error) {
+        status.textContent = `Error: ${error.message}`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

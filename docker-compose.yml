@@ -1,0 +1,29 @@
+services:
+  curbnet:
+    image: curbnet:latest
+    
+    build:
+      context: .
+      dockerfile: Dockerfile.notchina 
+    
+    volumes:
+      - ../:/app/files
+    
+    gpus: all
+    shm_size: '24gb'
+    ports:
+      - "127.0.0.1:5000:5000"
+
+    command: tail -f /dev/null
+
+# docker compose up -d 
+# docker exec -it curbnet-main-curbnet-1 sh
+# cd /app/files/CurbNet-main
+# python3 -u train_cylinder_asym_0.2.py 2>&1 | tee logs_dir/cylinder_asym_networks_curb_seq0.2.txt
+# for web app: python3 /app/files/CurbNet-main/app.py
+# then see localhost port 5000 
+
+
+# first time, i also did these to migrate the spconv API to new version 
+# pip3 install "libcst==1.1.0"
+# python3 migrate_spconv.py network --write

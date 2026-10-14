@@ -26,7 +26,8 @@ def build(model_config):
         nclasses=num_class)
 
 
-    # cylinder_fea - cylinder 鐗瑰緛鎻愬彇鍣?    cy_fea_net = cylinder_fea(grid_size=output_shape,
+    # cylinder_fea - cylinder 鐗瑰緛鎻愬彇鍣?    
+    cy_fea_net = cylinder_fea(grid_size=output_shape,
                               fea_dim=fea_dim,
                               out_pt_fea_dim=out_fea_dim,
                               fea_compre=num_input_features)

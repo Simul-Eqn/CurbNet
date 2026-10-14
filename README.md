@@ -192,6 +192,51 @@ python demo_folder_focal.py \
 
 ---
 
+## 🌐 Point-cloud web inference
+
+The Flask app serves an upload page and a REST endpoint for one complete `.e57` or
+`.ply` point cloud. The 3D view is interactive and displays at most 60,000 sampled
+points; all per-point model labels can be downloaded as a NumPy `.npy` file.
+
+Install the web-specific packages into the same environment as CurbNet:
+
+```bash
+pip install -r requirements-web.txt
+```
+
+Ensure the checkpoint referenced by `train_params.model_load_path` in
+`config/semantickitti-curb_0.2.yaml` is present, then start the app from the
+repository root:
+
+```bash
+python app.py
+```
+
+Set `CURBNET_CHECKPOINT` to override the configured checkpoint path, or
+`CURBNET_CONFIG` to use another config. Open `http://localhost:5000`.
+
+The REST API accepts multipart form data with a `file` field at
+`POST /api/predict`. It returns point/curb counts, a downsampled visualization,
+and a `labels_url`; fetch that URL to download the full `uint8` prediction array
+in original point order. Curb predictions use model class `1`, which corresponds
+to raw dataset label `3` in this config.
+
+The readers pass only XYZ and optional LiDAR intensity/reflectance to the model.
+PLY/E57 RGB or color attributes are ignored; if intensity is absent, zeros are
+used. Files must use compatible metric coordinates and orientation. Uploads are
+limited to 12 GiB, but accepting a file of that size does not guarantee it can
+fit in system/GPU memory: this initial app runs the entire cloud in one model
+call, so very large clouds may exhaust memory. The Flask development server is
+intended for local experimentation, not direct public deployment.
+
+The Dockerfiles are unchanged. Install the packages in `requirements-web.txt`
+manually into the CurbNet environment before starting the app. With the
+provided Compose setup, start the container, then run
+`python3 /app/files/CurbNet-main/app.py` inside it and open
+`http://localhost:5000`. Compose binds that port to localhost only.
+
+---
+
 ## ⭐ Citation
 
 If you find this project useful, please consider giving a ⭐ and citing our work:
