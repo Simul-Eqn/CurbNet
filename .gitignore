@@ -3,5 +3,8 @@ old
 builder/__pycache__
 network/__pycache__
 utils/__pycache__
+config/__pycache__
+dataloader/__pycache__
 */__pycache__/*
 *.pyc
+model_save

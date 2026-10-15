@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 
 from inference import CURB_CLASS_ID, CurbNetInference, MAX_UPLOAD_BYTES
 
+DEFAULT_CHECKPOINT = "1015_epoch6_model_curb_seq0.2_0519_4c_improve510_e100.pt"
 
 RESULTS_DIR = Path(os.environ.get(
     "CURBNET_RESULTS_DIR",
@@ -26,26 +27,75 @@ UPLOADS_DIR = Path(os.environ.get(
 VISUALIZATION_POINT_LIMIT = 60000
 
 
-def _visualization_indices(predictions, limit):
+def _spatially_stratified_indices(points, candidates, limit, rng):
+    if len(candidates) <= limit:
+        return candidates
+    if limit <= 0:
+        return np.empty(0, dtype=np.int64)
+
+    xyz = points[:, :3]
+    lower = np.min(xyz, axis=0)
+    span = np.ptp(xyz, axis=0)
+    span[span == 0] = 1
+    bins_per_axis = max(1, int(round(limit ** (1 / 3))))
+    candidate_xyz = xyz[candidates]
+    cell_coordinates = np.floor(
+        (candidate_xyz - lower) / span * bins_per_axis
+    ).astype(np.int64)
+    np.clip(cell_coordinates, 0, bins_per_axis - 1, out=cell_coordinates)
+    cell_keys = np.ravel_multi_index(cell_coordinates.T, (bins_per_axis,) * 3)
+
+    sorted_positions = np.argsort(cell_keys, kind="stable")
+    sorted_keys = cell_keys[sorted_positions]
+    starts = np.r_[0, np.flatnonzero(sorted_keys[1:] != sorted_keys[:-1]) + 1]
+    counts = np.diff(np.r_[starts, len(sorted_positions)])
+
+    if len(starts) >= limit:
+        selected_groups = np.linspace(0, len(starts) - 1, limit, dtype=np.int64)
+        selected_positions = (
+            starts[selected_groups]
+            + rng.integers(0, counts[selected_groups])
+        )
+        return candidates[sorted_positions[selected_positions]]
+
+    representative_positions = starts + rng.integers(0, counts)
+    sampled_mask = np.ones(len(candidates), dtype=bool)
+    sampled_mask[sorted_positions[representative_positions]] = False
+    remaining = limit - len(representative_positions)
+    available = candidates[sampled_mask]
+    extra = rng.choice(available, size=remaining, replace=False)
+    representatives = candidates[sorted_positions[representative_positions]]
+    return np.concatenate((representatives, extra))
+
+
+def _visualization_indices(points, predictions, limit):
+    if limit <= 0 or len(predictions) <= limit:
+        if limit > 0:
+            return np.arange(len(predictions), dtype=np.int64)
+        return np.empty(0, dtype=np.int64)
+
     curb_indices = np.flatnonzero(predictions == CURB_CLASS_ID)
     other_indices = np.flatnonzero(predictions != CURB_CLASS_ID)
+    rng = np.random.default_rng(0)
     curb_limit = min(len(curb_indices), limit // 2)
-    other_limit = limit - curb_limit
+    other_limit = min(len(other_indices), limit - curb_limit)
+    remaining = limit - curb_limit - other_limit
+    curb_limit += min(remaining, len(curb_indices) - curb_limit)
 
-    if len(curb_indices) > curb_limit:
-        curb_indices = curb_indices[np.linspace(0, len(curb_indices) - 1, curb_limit, dtype=np.int64)]
-    if len(other_indices) > other_limit:
-        other_indices = other_indices[
-            np.linspace(0, len(other_indices) - 1, other_limit, dtype=np.int64)
-        ]
-    return np.concatenate((curb_indices, other_indices))
+    sampled_curb = _spatially_stratified_indices(
+        points, curb_indices, curb_limit, rng
+    )
+    sampled_other = _spatially_stratified_indices(
+        points, other_indices, other_limit, rng
+    )
+    return np.concatenate((sampled_curb, sampled_other))
 
 
 def create_app(inference_model=None):
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
     inference_model = inference_model or CurbNetInference(
-        checkpoint_path=os.environ.get("CURBNET_CHECKPOINT") or None,
+        checkpoint_path=os.environ.get("CURBNET_CHECKPOINT", DEFAULT_CHECKPOINT),
         config_path=os.environ.get("CURBNET_CONFIG") or None,
     )
     inference_lock = threading.Lock()
@@ -79,7 +129,9 @@ def create_app(inference_model=None):
             predictions = result["predictions"]
             np.save(str(result_path), predictions, allow_pickle=False)
 
-            sample_indices = _visualization_indices(predictions, VISUALIZATION_POINT_LIMIT)
+            sample_indices = _visualization_indices(
+                result["points"], predictions, VISUALIZATION_POINT_LIMIT
+            )
             visualization = {
                 "xyz": result["points"][sample_indices].tolist(),
                 "labels": predictions[sample_indices].tolist(),

@@ -1,5 +1,4 @@
-# FROM nvidia/cuda:10.2-cudnn8-devel-ubuntu18.04
-FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.4.3-cudnn8-devel-ubuntu20.04
 
 # Just in case we need it
 ENV DEBIAN_FRONTEND noninteractive
@@ -11,13 +10,13 @@ RUN apt install -y git wget unzip
 RUN apt install -y build-essential
 RUN apt install -y ffmpeg libsm6 libxext6
 
-# get newer version of cmake
+# get cmake
 #RUN wget https://apt.kitware.com/kitware-archive.sh
 #RUN chmod +x kitware-archive.sh && ./kitware-archive.sh
 RUN pip3 install "cmake==3.27.9"
 ENV PATH="/usr/local/bin:${PATH}"
 
-RUN pip3 install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio==0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
+RUN pip3 install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio==0.10.0 -f https://download.pytorch.org/whl/torch_stable.html
 RUN pip3 install pyyaml==5.4.1
 RUN pip3 install cython==0.29.24
 RUN pip3 install nuscenes-devkit==1.1.6
@@ -25,15 +24,17 @@ RUN pip3 install numba==0.58.1
 RUN pip3 install strictyaml==1.4.4
 
 # Torch scatter
-RUN pip3 install --no-index torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.1+cu110.html
+RUN pip3 install --no-index torch-scatter==2.0.9 -f https://data.pyg.org/whl/torch-1.10.0+cu113.html
 
 RUN python3 -c "import torch; print('PyTorch:', torch.__version__); print('PyTorch CUDA:', torch.version.cuda)"
 RUN nvcc --version
 RUN cmake --version
 
-# SpConv 2
-RUN pip3 install spconv-cu102
+# SpConv 2, CUDA 11.4 
+RUN pip3 install spconv-cu114==2.1.25
 
+RUN python3 -c "import torch, torch_scatter, spconv.pytorch, cumm; print('PyTorch:', torch.__version__, 'CUDA:', torch.version.cuda); print('CUDA sparse ops imported successfully')"
+RUN nvcc --version
 
 ## Install Cylinder 3D
 WORKDIR /
@@ -48,3 +49,4 @@ RUN pip3 install Flask==2.2.5
 RUN pip3 install Werkzeug==2.2.3
 RUN pip3 install plyfile==1.0.3
 RUN pip3 install pye57==0.4.15
+RUN pip3 install open3d==0.18.0 

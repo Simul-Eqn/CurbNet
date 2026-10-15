@@ -151,6 +151,13 @@ We:
 - [spconv](https://github.com/traveller59/spconv) (tested with `spconv==1.2.1`, `cuda==10.2`)
 - [nuScenes-devkit](https://github.com/nutonomy/nuscenes-devkit) *(optional)*
 
+The active Compose image (`Dockerfile.notchina`) uses a CUDA 11.4 system toolkit
+and SpConv/Cumm built for CUDA 11.4. The closest official PyTorch wheel line is
+CUDA 11.3 (`torch==1.10.0+cu113`); torch-scatter is matched to that PyTorch
+wheel. Thus this is not a from-source PyTorch CUDA 11.4 build. The Docker build
+prints installed framework/library versions and the local CUDA compiler version
+to make the mixed wheel/toolkit versions explicit.
+
 
 
 ## 🚀 Training
@@ -196,7 +203,9 @@ python demo_folder_focal.py \
 
 The Flask app serves an upload page and a REST endpoint for one complete `.e57` or
 `.ply` point cloud. The 3D view is interactive and displays at most 60,000 sampled
-points; all per-point model labels can be downloaded as a NumPy `.npy` file.
+points; its sample is spatially stratified, with curb points given priority to
+preserve curb coverage across the scene. All per-point model labels can be
+downloaded as a NumPy `.npy` file.
 
 Install the web-specific packages into the same environment as CurbNet:
 
@@ -221,13 +230,35 @@ and a `labels_url`; fetch that URL to download the full `uint8` prediction array
 in original point order. Curb predictions use model class `1`, which corresponds
 to raw dataset label `3` in this config.
 
-The readers pass only XYZ and optional LiDAR intensity/reflectance to the model.
-PLY/E57 RGB or color attributes are ignored; if intensity is absent, zeros are
-used. Files must use compatible metric coordinates and orientation. Uploads are
-limited to 12 GiB, but accepting a file of that size does not guarantee it can
-fit in system/GPU memory: this initial app runs the entire cloud in one model
-call, so very large clouds may exhaust memory. The Flask development server is
-intended for local experimentation, not direct public deployment.
+The readers pass only XYZ and LiDAR intensity/reflectance to the model.
+PLY/E57 RGB or color attributes are ignored, and intensity is required.
+Files must use compatible metric coordinates and orientation. Uploads are
+limited to 12 GiB. Inference processes points in chunks of 250,000 by default;
+set `CURBNET_INFERENCE_CHUNK_POINTS` to another positive integer. Use a smaller
+value to reduce peak GPU use, or a larger value if the GPU has enough memory.
+Chunking can change predictions slightly because each model call sees only that
+chunk's occupied voxels and local context. The complete upload and result are
+still held in system memory, so large files also require sufficient host RAM.
+SpConv selects each layer's algorithm when the layer is constructed; inference
+does not mutate convolution algorithms after checkpoint weights are loaded,
+because algorithm selection affects the weight layout.
+The Flask development server is intended for local experimentation, not direct
+public deployment.
+
+### Full-resolution Open3D CLI viewer
+
+To run inference from a terminal and interactively display every point, install
+Open3D in the same environment:
+
+```bash
+pip install open3d==0.18.0
+python curbnet_view.py path/to/cloud.e57
+```
+
+PLY is also supported. Optional `--checkpoint`, `--config`, and `--chunk-size`
+arguments override the checkpoint/configuration and per-inference chunk size.
+The Open3D window displays every input point, with predicted curb points in
+green; very large clouds may require substantial system and graphics memory.
 
 The Dockerfiles are unchanged. Install the packages in `requirements-web.txt`
 manually into the CurbNet environment before starting the app. With the
